@@ -1,0 +1,20 @@
+useDynLib(EnviroStat)
+export(bgrid,
+       comb.all,
+       corrfit,
+       draw,
+       Disp.link,
+       Falternate3,
+       Fdist,
+       Flamb2,
+       Fmgrid,
+       Ftransdraw,
+       Fvariogfit3,
+       ldet.eval,
+       pred.dist.simul,
+       seval,
+       setplot,
+       sinterp,
+       staircase.EM,
+       staircase.hyper.est)
+import(MASS)
