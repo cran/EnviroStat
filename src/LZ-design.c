@@ -487,7 +487,7 @@ void eval_ent1c(sigv, M, N, comb, tmp1,aa)
   int *comb, M, N;
   double *sigv, *tmp1, **aa;
    {
-  int i, j, k, i1,i2;
+  int j, k, i1,i2;
   double det();
 
      for (j=0; j < M; j++) 

@@ -1,0 +1,13 @@
+NEWS
+====
+
+v0.4-1
+------
+
+- handle the cases in `staircase.EM` when B0 is provided or covariates
+  are univariate
+
+v0.4-0
+------
+
+- first public release on CRAN

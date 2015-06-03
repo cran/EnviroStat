@@ -49,10 +49,10 @@ staircase.EM =function(data,p=1,block=NULL,covariate=NULL,B0=NULL,init=NULL,a=2,
 #  data:   From input
 #  covariate: From input
 #
-#  Lambda.1K: The inverse Bartlett decomposition (eqn 23?)
+#  Lambda.1K: The inverse Bartlett decomposition (Le+Zidek 2006, Section 15.2, pages 302-303)
 #   
 ##########################
-# Equation numbers will be made consistent with Le and Zidek (2005 -forthcoming)
+# Details on estimation given in Le and Zidek (2006 - Statistical Analysis of Environmental Space-Time Process, Springer)
 ##########################
  
 
@@ -145,6 +145,7 @@ OMEGA=NULL
 OMEGA.temp=NULL
 
 y = data
+covariate = as.matrix(covariate)  #**** for only one covariate provided as vector, eg. overall mean
 z = covariate
 # Processing data provided and 
 #    compute dimensions
@@ -201,9 +202,9 @@ FF= matrix(0,dim(Z)[2],dim(Z)[2])
 for (i in K:1) {
 FF=FF+g[i]*(Fhat[[i]]=crossprod(Z[(m[i]+1):n,]))
 FhatInv = ginv(Fhat[[i]])
-# Bhat[i,...,k] - eqn (15)+(16): the first p columns are for eqn(15) and the rest (16). 
+# Get Bhat[i,...,k]; see Le+Zidek (2006) Section 10.4
 Bhat[[i]] = crossprod(FhatInv,crossprod(Z[(m[i]+1):n,],y[(m[i]+1):n,dm[i,1]:dm[K,2]]))
-# Bhat_0^j in eqn(16)
+# Bhat_0^j
 if (b0) { 
  if (dim(Z)[2]==1) B0 = c(Bhat[[i]][,1:(g[i]*p)],B0)
    else  B0 = cbind(Bhat[[i]][,1:(g[i]*p)],B0)   
@@ -211,8 +212,12 @@ if (b0) {
 }
 
 q = dim(Bhat[[K]])[1]
-if (dim(Z)[2]> 1) B0 = matrix(apply(B0,1,mean),nrow=q,ncol=dm[K,2])
-   else B0 = matrix(B0,nrow=q,ncol=dm[K,2])
+
+if (b0) {     # *** to cover the case when B0 is provided and doesn't need to be estimated
+    if (dim(Z)[2]> 1) B0 = matrix(apply(B0,1,mean),nrow=q,ncol=dm[K,2])
+    else B0 = matrix(B0,nrow=q,ncol=dm[K,2])
+}
+
 if (dim(Z)[2]!=dim(B0)[1])
  stop("B0 has dimensions inconsistent with Z")
 priortrend=crossprod(t(Z),B0)
@@ -281,11 +286,11 @@ if (!is.null(init)) {
   }
 }
 
-# Compute marginal density with initial values 
+# Compute marginal density with initial values - Le+Zidek(2006) Section 10.3, pages 159-161
 MD1=0
 dd0 = d[K]-g[K]*p+1
 if (is.null(z)) PHI[[K]]=diag(n)
-else PHI[[K]]=invAeI(Z,FF) #A22
+else PHI[[K]]=invAeI(Z,FF)
 A = solve(PHI[[K]])
 B=kronecker(LAM[[K]]/(dd0),OMEGA)
 x1=epst[(m[K]+1):n,dm[K,1]:dm[K,2],drop=FALSE]
@@ -299,11 +304,11 @@ if (K >1) for (j in (K-1):1) {
  P1=crossprod(lambdastar[[j+1]],XI0[[j]])
  P2=crossprod(XI0[[j]],P1)
  lambdastar[[j]] = rbind(cbind(LAM[[j]]+P2,t(P1)),cbind(P1,lambdastar[[j+1]]))
- Hinv[[j]]=kronecker(lambdastar[[j+1]],OMEGA) # inverted (21)
- if(is.null(z)) PHI[[j]]= invAeI(x2,Hinv[[j]]) # A22 in (26)
+ Hinv[[j]]=kronecker(lambdastar[[j+1]],OMEGA)
+ if(is.null(z)) PHI[[j]]= invAeI(x2,Hinv[[j]])
   else { 
  Ainv=invAeI(Z[(m[j]+1):n,],FF)
- PHI[[j]]=invert(Ainv,x2,Hinv[[j]]) # A22 used in (26)
+ PHI[[j]]=invert(Ainv,x2,Hinv[[j]])
   }
 A = solve(PHI[[j]])
 B = kronecker(LAM[[j]]/(dd0),OMEGA)
@@ -329,6 +334,7 @@ if (verbose) cat(paste("\nIteration",iter,"\n"))
 
 #####################################################
 # E-STEP: Evaluating the expectations given the current estimates 
+# Le+Zidek (2006) Section 10.5, pages 165-167
 #####################################################
 
 # Starting with the last block (Block K: Full data stations - no T0 or H required)
@@ -337,21 +343,21 @@ x1=epst[,dm[K,1]:dm[K,2],drop=FALSE]
 
 # Evaluate the expectations given para. estimates at previous iter
 lambdastar[[K]] = LAM[[K]]  # this is used to evaluate Hinv for other blocks
-PSI[[K]]=LAM[[K]]/(d[K]-g[K]*p-1)  # (19)
+PSI[[K]]=LAM[[K]]/(d[K]-g[K]*p-1)
 PHI[[K]]=diag(n)  
 if (is.null(Finv)) SSQ[[K]]=crossprod(x1)
 else {
   PHI[[K]]=invAeI(Z,FF) #A22
   SSQ[[K]]=crossprod(x1,crossprod(PHI[[K]],x1))
 }
-PSIt[[K]]=kronecker(LAM[[K]],OMEGA)+SSQ[[K]]  # (4)
-ESI[[K]]=EGAI[[K]]=(d[K]+n-m[K])*solve(PSIt[[K]])  # (3) & page 8 E[SIGMA{k,k}]
+PSIt[[K]]=kronecker(LAM[[K]],OMEGA)+SSQ[[K]]
+ESI[[K]]=EGAI[[K]]=(d[K]+n-m[K])*solve(PSIt[[K]])
 
-ELG[K]=det.BD(PSIt[[K]])-g[K]*p*log(2)-sum(digamma((d[K]+n-m[K]+1-1:(g[K]*p))/2)) # (10)
+ELG[K]=det.BD(PSIt[[K]])-g[K]*p*log(2)-sum(digamma((d[K]+n-m[K]+1-1:(g[K]*p))/2))
 
 # Evaluate components of tilde(beta_K) and E(beta Sig^{-1}), 
 #  and E(beta Sig^{-1} beta) - corresponding to block K.
-# Note: These are only needed if covariate(s) exists - eqn 12-14.
+# Note: These are only needed if covariate(s) exists
 if (!is.null(Finv)) {
 Ft[[K]]=Fhat[[K]]+FF  # Eqn(12)
 FtInv = ginv(Ft[[K]])
@@ -369,47 +375,47 @@ EBSB=crossprod(t(EBS[[K]]),t(Bt[[K]]))+g[K]*p*solve(Ft[[K]])
 #
 if (K>1) for ( i in (K-1):1) {
 
-# Evaluate Hinv_i (assuming the IW pattern) - Eqns 21+22
+# Evaluate Hinv_i (assuming the IW pattern)
 P1=crossprod(lambdastar[[i+1]],XI0[[i]]) 
 P2=crossprod(XI0[[i]],P1) 
 lambdastar[[i]] = rbind(cbind(LAM[[i]]+P2,t(P1)),cbind(P1,lambdastar[[i+1]]))
-Hinv[[i]]=kronecker(lambdastar[[i+1]],OMEGA) # inverted (21)
+Hinv[[i]]=kronecker(lambdastar[[i+1]],OMEGA)
 
 
-# Evaluate Psi  - Eqn (18)
-P1=crossprod(PSI[[i+1]],XI0[[i]]) # 1,2 and 2,1 piece of (18)
-P2=crossprod(XI0[[i]],P1) # piece of 1,1 of (18)
+# Evaluate Psi
+P1=crossprod(PSI[[i+1]],XI0[[i]])
+P2=crossprod(XI0[[i]],P1)
 trpsih = sum(diag(crossprod(PSI[[i+1]],solve(lambdastar[[i+1]]))))*p
-P3=LAM[[i]]*(1+trpsih)/(d[i]-g[i]*p-1) # other piece of 1,1 of (18)
-PSI[[i]]=rbind(cbind(P3+P2,t(P1)),cbind(P1,PSI[[i+1]])) # (18)
+P3=LAM[[i]]*(1+trpsih)/(d[i]-g[i]*p-1)
+PSI[[i]]=rbind(cbind(P3+P2,t(P1)),cbind(P1,PSI[[i+1]]))
 
-# Evaluate tilde(tau), tilde(H_i), and component A22 in Eqn 26 (part of Eqn 4)
+# Evaluate tilde(tau), tilde(H_i), and component A22
 # Extract data from block i (x1) and  blocks i+1 to K (x2)
 x1=epst[(m[i]+1):n,dm[i,1]:dm[i,2],drop=FALSE]  
 x2=epst[(m[i]+1):n,dm[i+1,1]:dm[K,2],drop=FALSE]
 
 # if no covariates 
 if (is.null(Finv)) {
-Ht[[i]]=solve(Hinv[[i]]+crossprod(x2))  # (5)
+Ht[[i]]=solve(Hinv[[i]]+crossprod(x2))
 T0t[[i]]=crossprod(Ht[[i]],(crossprod(Hinv[[i]],T0[[i]])+
-        crossprod(x2,x1)))  # (6)
-PHI[[i]]=invAeI(x2,Hinv[[i]]) # A22
+        crossprod(x2,x1)))
+PHI[[i]]=invAeI(x2,Hinv[[i]])
 }
 # if there are covariates
 else {
-Ainv=invAeI(Z[(m[i]+1):n,],FF) # part of (4) (5) and (6)
-Ht[[i]]=solve(Hinv[[i]]+crossprod(x2,crossprod(Ainv,x2)))   # (5)
+Ainv=invAeI(Z[(m[i]+1):n,],FF)
+Ht[[i]]=solve(Hinv[[i]]+crossprod(x2,crossprod(Ainv,x2)))
 T0t[[i]]=crossprod(Ht[[i]],(crossprod(Hinv[[i]],T0[[i]])+
         crossprod(x2,crossprod(Ainv,x1)))) # (6)
-PHI[[i]]=invert(Ainv,x2,Hinv[[i]]) # A22 used in (4)
+PHI[[i]]=invert(Ainv,x2,Hinv[[i]])
 }
-x3=x1-crossprod(t(x2),T0[[i]]) # part of (4)
-SSQ[[i]]=crossprod(x3,crossprod(PHI[[i]],x3)) # part of (4)
-PSIt[[i]]=kronecker(LAM[[i]],OMEGA)+SSQ[[i]] # (4)
-EGAI[[i]]=(d[i]+n-m[i])*solve(PSIt[[i]])  # (3)
+x3=x1-crossprod(t(x2),T0[[i]])
+SSQ[[i]]=crossprod(x3,crossprod(PHI[[i]],x3))
+PSIt[[i]]=kronecker(LAM[[i]],OMEGA)+SSQ[[i]]
+EGAI[[i]]=(d[i]+n-m[i])*solve(PSIt[[i]])
 
 # Evaluate E[SIGMA^{-1}{i,i}] in Eqn 23
-tmp=crossprod(t(T0t[[i]]),EGAI[[i]]) # 1,2 and 2,1 piece of E[SIGMA^{-1}{i,i}]  page 8
+tmp=crossprod(t(T0t[[i]]),EGAI[[i]]) # 1,2 and 2,1 pieces of E[SIGMA^{-1}{i,i}]
 tmp1=crossprod(t(tmp),t(T0t[[i]]))+g[i]*p*Ht[[i]]+ESI[[i+1]] # 2,2 piece of  E[SIGMA{i,i}]
 ESI[[i]]=rbind(cbind(EGAI[[i]],-t(tmp)),cbind(-tmp,tmp1))
 
@@ -418,15 +424,15 @@ EGTH[[i]] = crossprod(tmp,Hinv[[i]])
 
 
 # Evaluate E(log(|Gamma_i|)
-ELG[i]=det.BD(PSIt[[i]])-g[i]*p*log(2)-sum(digamma((d[i]+n-m[i]+1-1:(g[i]*p))/2)) # (10)
+ELG[i]=det.BD(PSIt[[i]])-g[i]*p*log(2)-sum(digamma((d[i]+n-m[i]+1-1:(g[i]*p))/2))
 
-# Adding components to E(beta Sig^{-1} beta) in Eqn 17 and  E(beta Sig^{-1}) in Eqn 11
+# Adding components to E(beta Sig^{-1} beta)
 if (!is.null(Finv)) {
 Ft[[i]]=Fhat[[i]]+FF # (12)
 FtInv = ginv(Ft[[i]])
 W[[i]]=crossprod(FtInv, Fhat[[i]]) # between (12) & (13) 
 Bt[[i]]=crossprod(t(W[[i]]),Bhat[[i]])+
-      crossprod(t(diag(q)-W[[i]]),B0[,dm[i,1]:dm[K,2],drop=FALSE]) # (13) & (14)
+      crossprod(t(diag(q)-W[[i]]),B0[,dm[i,1]:dm[K,2],drop=FALSE])
 
 tmp=Bt[[i]][,1:(g[i]*p),drop=FALSE]-
   crossprod(t(Bt[[i]][, (g[i]*p+1):(dim(Bt[[i]])[2]),drop=FALSE]),T0t[[i]])
@@ -435,16 +441,17 @@ tmp1=crossprod(t(tmp0),t(T0t[[i]]))
 tmp2=g[i]*p*crossprod(t(Bt[[i]][,(g[i]*p+1):(dim(Bt[[i]])[2]),drop=FALSE]),Ht[[i]])
 # Augmenting E(BSigma^{-1}) - Eqn 11
 EBS[[i]]=cbind(tmp0, EBS[[i+1]]-tmp1+tmp2)  
-# Adding relevant components to E(BSigma^{-1} B)- Eqn 17
+# Adding relevant components to E(BSigma^{-1} B)
 EBSB=EBSB+g[i]*p*solve(Ft[[i]])+
-  crossprod(t(tmp2),t(Bt[[i]][,(g[i]*p+1):(dim(Bt[[i]])[2]),drop=FALSE]))  # computing (17)
-EBSB=EBSB+crossprod(t(tmp0),t(tmp))  # computing (17)
+  crossprod(t(tmp2),t(Bt[[i]][,(g[i]*p+1):(dim(Bt[[i]])[2]),drop=FALSE]))
+EBSB=EBSB+crossprod(t(tmp0),t(tmp))
 }
 }
 
 #############################################################
 #
 # M-STEP: Maximize the objective function to get new estimates of parameters
+# See Section 10.6 - Maximization Equations, Le+Zidek(2006)
 #############################################################
 #  Need iteration between Omega + Lambda and delta
 # 
@@ -489,7 +496,6 @@ if (abs(f0)<tol/100) break
 d.temp[i]=max(d.temp[i]-f0/f2,p*g[i]+2)
 
 }
-# if (verbose) cat(paste("                      i,  f0: ",l,f0,"\n"))
  }
 }
 
@@ -525,6 +531,7 @@ if (b0) {
 beta.tmp = solve(crossprod(t(R),crossprod(ESI[[1]],t(R))), crossprod(t(R),t(EBS[[1]])))
 B0.tmp = crossprod(beta.tmp,R)
 }
+else B0.tmp = B0  # ***  to cover the case when B0 is provided
 tmp0=crossprod(t(EBS[[1]]),t(B0.tmp))
 tmp1=crossprod(t(B0.tmp),crossprod(ESI[[1]],t(B0.tmp)))
 Finv.tmp=(EBSB-tmp0-t(tmp0)+tmp1)/dm[K,2]
@@ -555,7 +562,7 @@ FF = FF.tmp
 MD1=0
 dd0 = d[K]-g[K]*p+1
 if (is.null(z)) PHI[[K]]=diag(n)
-else PHI[[K]]=invAeI(Z,FF) #A22
+else PHI[[K]]=invAeI(Z,FF)
 A = solve(PHI[[K]])
 B=kronecker(LAM[[K]]/(dd0),OMEGA)
 x1=epst[(m[K]+1):n,dm[K,1]:dm[K,2],drop=FALSE]
@@ -569,11 +576,11 @@ if (K >1) for (j in (K-1):1) {
  P1=crossprod(lambdastar[[j+1]],XI0[[j]])
  P2=crossprod(XI0[[j]],P1)
  lambdastar[[j]] = rbind(cbind(LAM[[j]]+P2,t(P1)),cbind(P1,lambdastar[[j+1]]))
- Hinv[[j]]=kronecker(lambdastar[[j+1]],OMEGA) # inverted (21)
- if(is.null(z)) PHI[[j]]= invAeI(x2,Hinv[[j]]) # A22 in (26)
+ Hinv[[j]]=kronecker(lambdastar[[j+1]],OMEGA)
+ if(is.null(z)) PHI[[j]]= invAeI(x2,Hinv[[j]])
   else { 
     Ainv=invAeI(Z[(m[j]+1):n,],FF)
-    PHI[[j]]=invert(Ainv,x2,Hinv[[j]]) # A22 used in (26)
+    PHI[[j]]=invert(Ainv,x2,Hinv[[j]])
   }
 A = solve(PHI[[j]])
 B = kronecker(LAM[[j]]/(dd0),OMEGA)
@@ -600,6 +607,7 @@ if (verbose) cat("\n\n")
 names(d) = NULL
 del = list()
 for (i in 1:K) del[[i]] = d[i]
+B0 = as.matrix(B0) #*** to ensure B0 is passed as matrix
 obj=list(Delta=del,Omega=OMEGA,Lambda=LAM,Xi0=XI0,Beta0=B0,Finv=Finv,Psi=PSI,
                      Hinv=Hinv,data=data, block= block, covariate=covariate)
 return(obj)
